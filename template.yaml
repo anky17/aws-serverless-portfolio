@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Portfolio & Blog - 79010402
+
+Parameters:
+  LabRoleArn:
+    Type: String
+    Description: >
+      ARN of the pre-provisioned execution role for Lambda (AWS Academy
+      Learner Lab provides this as "LabRole"). Override with
+      --parameter-overrides when deploying from a different account.
+    Default: arn:aws:iam::588888086598:role/LabRole
+
+Resources:
+  PostsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: 79010402-blog-posts
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: postId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: postId
+          KeyType: HASH
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: 79010402-user-pool
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      UserPoolId: !Ref UserPool
+      ClientName: 79010402-app-client
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      GenerateSecret: false
+
+  PostsApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,POST,OPTIONS'"
+        AllowHeaders: "'Content-Type,Authorization'"
+        AllowOrigin: "'*'"
+      Auth:
+        Authorizers:
+          CognitoAuth:
+            UserPoolArn: !GetAtt UserPool.Arn
+
+  CreatePostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/create_post/
+      Handler: app.lambda_handler
+      Runtime: python3.12
+      Role: !Ref LabRoleArn
+      Events:
+        CreatePost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PostsApi
+            Path: /posts
+            Method: post
+            Auth:
+              Authorizer: CognitoAuth
+
+  ListPostsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/list_posts/
+      Handler: app.lambda_handler
+      Runtime: python3.12
+      Role: !Ref LabRoleArn
+      Events:
+        ListPosts:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PostsApi
+            Path: /posts
+            Method: get
+
+  GetPostFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: backend/get_post/
+      Handler: app.lambda_handler
+      Runtime: python3.12
+      Role: !Ref LabRoleArn
+      Events:
+        GetPost:
+          Type: Api
+          Properties:
+            RestApiId: !Ref PostsApi
+            Path: /posts/{id}
+            Method: get
+
+  PortfolioBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 79010402-portfolio-site
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  PortfolioBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref PortfolioBucket
+      PolicyDocument:
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: "*"
+            Action: s3:GetObject
+            Resource: !Sub "${PortfolioBucket.Arn}/*"
+
+Outputs:
+  ApiUrl:
+    Value: !Sub "https://${PostsApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  WebsiteUrl:
+    Value: !GetAtt PortfolioBucket.WebsiteURL
+  UserPoolId:
+    Value: !Ref UserPool
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
