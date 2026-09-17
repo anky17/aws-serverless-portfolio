@@ -1,6 +1,14 @@
 const API_URL = "https://4mdmc3on3j.execute-api.us-east-1.amazonaws.com/prod";
 const CLIENT_ID = "2s363ittj18dt991brfbsqs1td";
 
+function updateNav() {
+  const link = document.getElementById("newPostLink");
+  if (!link) return;
+  link.classList.toggle("hidden", !localStorage.getItem("token"));
+}
+
+updateNav();
+
 async function loadPosts() {
   const res = await fetch(`${API_URL}/posts`);
   const posts = await res.json();
@@ -49,9 +57,17 @@ function initNewPost() {
       localStorage.setItem("token", data.AuthenticationResult.IdToken);
       document.getElementById("loginBox").classList.add("hidden");
       document.getElementById("postBox").classList.remove("hidden");
+      updateNav();
     } else {
       document.getElementById("loginMsg").innerText = "Login failed";
     }
+  };
+
+  document.getElementById("logoutBtn").onclick = () => {
+    localStorage.removeItem("token");
+    document.getElementById("postBox").classList.add("hidden");
+    document.getElementById("loginBox").classList.remove("hidden");
+    updateNav();
   };
 
   document.getElementById("postForm").onsubmit = async (e) => {
